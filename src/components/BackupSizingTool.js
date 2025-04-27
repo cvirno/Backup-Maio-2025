@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Grid, TextField, Typography, Paper, Divider,
   Slider, InputAdornment, FormControl, RadioGroup,
-  FormControlLabel, Radio, Button, LinearProgress, Chip,
+  FormControlLabel, Radio, Button, LinearProgress, Alert,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Tooltip, IconButton, MenuItem
 } from '@mui/material';
@@ -23,7 +23,12 @@ import {
   Remove as RemoveIcon
 } from '@mui/icons-material';
 
-// Configurações de discos atualizadas conforme solicitado
+/*
+ * INFINISIZING BACKUP
+ * Desenvolvido por Cesaar Virno
+ * Ferramenta de Dimensionamento Avançado para Infraestrutura de Backup
+ */
+
 const DISK_TYPES = {
   CACHE: [
     { name: "SSD 480GB", size: 480, throughput: 3.5, color: "#4fc3f7" },
@@ -47,10 +52,8 @@ const DISK_TYPES = {
   ]
 };
 
-// Alterado para 12 discos no total por appliance conforme solicitado
 const MAX_DISKS_PER_NODE = 12;
 
-// Componentes estilizados
 const ConfigCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   borderRadius: '12px',
@@ -135,27 +138,24 @@ const DiskConfigurator = ({ title, diskType, disks, maxDisks, onDiskChange, onCo
 
 const BackupSizingTool = () => {
   const [inputs, setInputs] = useState({
-    // Parâmetros de backup
     originalDataSizeTB: 10,
     dailyChangeRate: 5,
     retentionDays: 30,
     compressionRatio: 2,
     annualGrowthRate: 10,
     forecastYears: 3,
-    
-    // Configuração de proteção
-    protectionLevel: 'standard', // 'standard' (2x) ou 'high' (3x)
-    
-    // Configuração de discos por appliance (inicial com 4 cache + 8 dados = 12 total)
-    cacheDisks: Array(4).fill(DISK_TYPES.CACHE[2]), // 4x SSD 1.92TB
-    dataDisks: Array(8).fill(DISK_TYPES.DATA[5]), // 8x HDD 12TB
-    
-    // Overhead personalizável
-    cacheOverhead: 5, // %
-    dataOverhead: 7, // %
-    
-    // Appliances manuais
+    protectionLevel: 'standard',
+    cacheDisks: Array(4).fill(DISK_TYPES.CACHE[2]),
+    dataDisks: Array(8).fill(DISK_TYPES.DATA[5]),
+    cacheOverhead: 5,
+    dataOverhead: 7,
     manualAppliances: 3
+  });
+
+  const [resourceUsage, setResourceUsage] = useState({
+    cpu: 65,
+    memory: 70,
+    disk: 85
   });
 
   const [results, setResults] = useState(null);
@@ -181,66 +181,46 @@ const BackupSizingTool = () => {
       manualAppliances
     } = inputs;
 
-    // 1. Calcular crescimento dos dados
     const growthFactor = Math.pow(1 + annualGrowthRate / 100, forecastYears);
     const projectedDataSizeTB = originalDataSizeTB * growthFactor;
-
-    // 2. Calcular dados diários de backup
     const dailyChangedDataTB = projectedDataSizeTB * (dailyChangeRate / 100);
     const dailyBackupSizeTB = dailyChangedDataTB / compressionRatio;
-
-    // 3. Calcular armazenamento total necessário
     const backupStorageTB = dailyBackupSizeTB * retentionDays;
     const protectionFactor = protectionLevel === 'standard' ? 2 : 3;
     const totalProtectedStorageTB = backupStorageTB * protectionFactor;
 
-    // 4. Calcular capacidade por appliance
     const cacheCapacityTB = cacheDisks.reduce((sum, disk) => sum + disk.size, 0) * (1 - cacheOverhead / 100) / 1000;
     const dataCapacityTB = dataDisks.reduce((sum, disk) => sum + disk.size, 0) * (1 - dataOverhead / 100) / 1000;
     const totalApplianceCapacityTB = cacheCapacityTB + dataCapacityTB;
 
-    // 5. Calcular throughput por appliance (TB/h)
     const cacheThroughput = cacheDisks.reduce((sum, disk) => sum + disk.throughput, 0);
     const dataThroughput = dataDisks.reduce((sum, disk) => sum + disk.throughput, 0);
-    const totalThroughputTBh = (cacheThroughput + dataThroughput) * 3.6; // Convertendo GB/s para TB/h
+    const totalThroughputTBh = (cacheThroughput + dataThroughput) * 3.6;
 
-    // 6. Calcular appliances necessários
     const calculatedAppliances = Math.ceil(totalProtectedStorageTB / totalApplianceCapacityTB);
     const finalAppliances = Math.max(calculatedAppliances, manualAppliances);
     
-    // 7. Verificar throughput
     const requiredDailyThroughputTB = dailyBackupSizeTB;
     const clusterThroughputTBh = totalThroughputTBh * finalAppliances;
     const throughputSufficient = clusterThroughputTBh >= requiredDailyThroughputTB;
 
     setResults({
-      // Projeções
       projectedDataSizeTB: projectedDataSizeTB.toFixed(2),
       dailyBackupSizeTB: dailyBackupSizeTB.toFixed(2),
       backupStorageTB: backupStorageTB.toFixed(2),
       totalProtectedStorageTB: totalProtectedStorageTB.toFixed(2),
-      
-      // Por appliance
       perAppliance: {
         cacheCapacityTB: cacheCapacityTB.toFixed(2),
         dataCapacityTB: dataCapacityTB.toFixed(2),
         totalCapacityTB: totalApplianceCapacityTB.toFixed(2),
-        throughputTBh: totalThroughputTBh.toFixed(2),
-        cacheOverhead: cacheOverhead,
-        dataOverhead: dataOverhead
+        throughputTBh: totalThroughputTBh.toFixed(2)
       },
-      
-      // Cluster
       calculatedAppliances,
       finalAppliances,
       clusterThroughputTBh: clusterThroughputTBh.toFixed(2),
       throughputSufficient,
-      
-      // Requisitos
       requiredDailyThroughputTB: requiredDailyThroughputTB.toFixed(2),
       protectionFactor,
-      
-      // Utilização
       storageUtilization: ((totalProtectedStorageTB / (totalApplianceCapacityTB * finalAppliances)) * 100).toFixed(1)
     });
   };
@@ -277,6 +257,10 @@ const BackupSizingTool = () => {
     });
   };
 
+  // Para alterar o título no browser, você precisará também modificar:
+  // 1. O arquivo public/index.html (título e meta tags)
+  // 2. O arquivo src/index.js (document.title)
+
   return (
     <Box sx={{
       p: { xs: 2, md: 4 },
@@ -291,7 +275,11 @@ const BackupSizingTool = () => {
         alignItems: 'center'
       }}>
         <StorageIcon sx={{ mr: 2, color: '#3182ce' }} />
-        Dimensionamento Avançado para Backup
+        InfiniSizing Backup
+      </Typography>
+      
+      <Typography variant="subtitle2" sx={{ mb: 3, color: '#4a5568', fontStyle: 'italic' }}>
+        Desenvolvido por Cesaar Virno
       </Typography>
       
       <Grid container spacing={3}>
@@ -536,7 +524,7 @@ const BackupSizingTool = () => {
               />
             </Box>
             
-            {/* Configuração Manual de Appliances */}
+            {/* Configuração Manual de Appliances - CORRIGIDA */}
             <Box sx={{ mt: 3 }}>
               <Button 
                 variant="text" 
@@ -550,28 +538,39 @@ const BackupSizingTool = () => {
                 <Box sx={{ mt: 2, p: 2, backgroundColor: '#edf2f7', borderRadius: '8px' }}>
                   <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
                     Configuração Manual de Appliances
-                    <Tooltip title="Defina manualmente o número mínimo de appliances, mesmo que o cálculo sugira menos">
+                    <Tooltip title="Defina manualmente o número mínimo de appliances">
                       <InfoIcon sx={{ fontSize: '1rem', ml: 1, color: '#718096' }} />
                     </Tooltip>
                   </Typography>
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <IconButton 
-                      onClick={() => setInputs({...inputs, manualAppliances: Math.max(1, inputs.manualAppliances - 1)})}
-                      sx={{ color: '#4a5568' }}
+                      onClick={() => setInputs(prev => ({
+                        ...prev,
+                        manualAppliances: Math.max(1, prev.manualAppliances - 1)
+                      }))}
+                      disabled={inputs.manualAppliances <= 1}
                     >
                       <RemoveIcon />
                     </IconButton>
                     <TextField
                       type="number"
                       value={inputs.manualAppliances}
-                      onChange={(e) => setInputs({...inputs, manualAppliances: Math.max(1, Number(e.target.value))})}
+                      onChange={(e) => {
+                        const value = Math.max(1, parseInt(e.target.value) || 1);
+                        setInputs(prev => ({
+                          ...prev,
+                          manualAppliances: value
+                        }));
+                      }}
                       variant="outlined"
                       sx={{ width: '80px' }}
                     />
                     <IconButton 
-                      onClick={() => setInputs({...inputs, manualAppliances: inputs.manualAppliances + 1})}
-                      sx={{ color: '#4a5568' }}
+                      onClick={() => setInputs(prev => ({
+                        ...prev,
+                        manualAppliances: prev.manualAppliances + 1
+                      }))}
                     >
                       <AddIcon />
                     </IconButton>
@@ -719,7 +718,7 @@ const BackupSizingTool = () => {
                             {(
                               (inputs.cacheDisks.length * (inputs.cacheDisks[0]?.size || 0) + 
                               (inputs.dataDisks.length * (inputs.dataDisks[0]?.size || 0))
-                            ) / 1000)}
+                            ) / 1000).toFixed(2)} TB
                           </TableCell>
                           <TableCell></TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>{results.perAppliance.totalCapacityTB} TB</TableCell>
