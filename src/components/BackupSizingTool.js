@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Grid, TextField, Typography, Paper, Divider,
   Slider, InputAdornment, FormControl, RadioGroup,
   FormControlLabel, Radio, Button, LinearProgress, Alert,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Tooltip, IconButton, MenuItem
+  Tooltip, IconButton, MenuItem, Chip, Tabs, Tab
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
@@ -20,7 +20,9 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon,
   Add as AddIcon,
-  Remove as RemoveIcon
+  Remove as RemoveIcon,
+  VerifiedUser as VerifiedIcon,
+  ShowChart as ChartIcon
 } from '@mui/icons-material';
 
 /*
@@ -53,6 +55,63 @@ const DISK_TYPES = {
 };
 
 const MAX_DISKS_PER_NODE = 12;
+
+// Cenários de Disaster Recovery
+const DR_SCENARIOS = [
+  { 
+    id: 1,
+    name: "Tier 1 (Crítico)", 
+    description: "SLA Corporativo para cargas de trabalho essenciais",
+    rto: "1 hora",
+    rpo: "15 minutos",
+    costMultiplier: 3.5,
+    features: [
+      "Replicação síncrona",
+      "Failover automático",
+      "Snapshots a cada 15 min",
+      "Infraestrutura dedicada"
+    ],
+    compliance: ["LGPD", "SOX", "HIPAA"]
+  },
+  { 
+    id: 2,
+    name: "Tier 2 (Importante)", 
+    description: "Para aplicações de negócios importantes",
+    rto: "4 horas",
+    rpo: "1 hora",
+    costMultiplier: 2.0,
+    features: [
+      "Replicação assíncrona",
+      "Failover manual",
+      "Backups horários",
+      "Infra compartilhada"
+    ],
+    compliance: ["LGPD"]
+  },
+  { 
+    id: 3,
+    name: "Tier 3 (Básico)", 
+    description: "Para dados não críticos e arquivamento",
+    rto: "24 horas",
+    rpo: "24 horas",
+    costMultiplier: 1.0,
+    features: [
+      "Backups diários",
+      "Restauração sob demanda",
+      "Armazenamento padrão"
+    ],
+    compliance: []
+  }
+];
+
+// Configurações de Growth Scaling
+const GROWTH_SCENARIOS = [
+  { year: 1, growthRate: 10 },
+  { year: 2, growthRate: 20 },
+  { year: 3, growthRate: 30 },
+  { year: 4, growthRate: 40 },
+  { year: 5, growthRate: 50 }
+];
 
 const ConfigCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -136,6 +195,166 @@ const DiskConfigurator = ({ title, diskType, disks, maxDisks, onDiskChange, onCo
   );
 };
 
+const DRScenarioCard = ({ scenario, isSelected, onSelect }) => {
+  return (
+    <Paper 
+      onClick={() => onSelect(scenario)}
+      sx={{
+        p: 2,
+        mb: 2,
+        border: isSelected ? '2px solid #3182ce' : '1px solid #e2e8f0',
+        backgroundColor: isSelected ? '#ebf8ff' : '#ffffff',
+        cursor: 'pointer',
+        '&:hover': {
+          backgroundColor: '#f7fafc'
+        }
+      }}
+    >
+      <Box display="flex" justifyContent="space-between">
+        <Typography variant="h6">{scenario.name}</Typography>
+        <Chip 
+          label={`${scenario.rto} RTO / ${scenario.rpo} RPO`} 
+          color={isSelected ? "primary" : "default"}
+        />
+      </Box>
+      <Typography variant="body2" sx={{ mt: 1, color: '#4a5568' }}>
+        {scenario.description}
+      </Typography>
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle2">Recursos:</Typography>
+        <ul style={{ paddingLeft: '20px', margin: '8px 0' }}>
+          {scenario.features.map((feature, index) => (
+            <li key={index} style={{ color: '#4a5568', fontSize: '0.875rem' }}>{feature}</li>
+          ))}
+        </ul>
+      </Box>
+      {scenario.compliance.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="subtitle2">Conformidade:</Typography>
+          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+            {scenario.compliance.map((item) => (
+              <Chip 
+                key={item}
+                icon={<VerifiedIcon fontSize="small" />}
+                label={item}
+                size="small"
+                color="success"
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+      <Typography variant="subtitle2" sx={{ mt: 2 }}>
+        Custo relativo: {scenario.costMultiplier}x o Tier 3
+      </Typography>
+    </Paper>
+  );
+};
+
+const GrowthProjectionChart = ({ projections }) => {
+  return (
+    <Box sx={{ 
+      p: 2, 
+      border: '1px solid #e2e8f0', 
+      borderRadius: '8px',
+      backgroundColor: '#ffffff'
+    }}>
+      <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+        <ChartIcon sx={{ mr: 1, color: '#3182ce' }} />
+        Projeção de Crescimento
+      </Typography>
+      
+      <Box sx={{ 
+        height: '300px', 
+        display: 'flex', 
+        alignItems: 'flex-end',
+        justifyContent: 'space-around',
+        mt: 4,
+        borderBottom: '1px solid #e2e8f0',
+        position: 'relative'
+      }}>
+        {projections.map((proj, index) => {
+          const height = 20 + (proj.growthRate * 3);
+          const isCritical = proj.growthRate > 30;
+          return (
+            <Box key={index} sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              width: '60px'
+            }}>
+              <Tooltip title={`Ano ${proj.year}: ${proj.growthRate}% crescimento`}>
+                <Box
+                  sx={{
+                    width: '40px',
+                    height: `${height}px`,
+                    backgroundColor: isCritical ? '#e53e3e' : '#3182ce',
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      opacity: 0.8
+                    }
+                  }}
+                />
+              </Tooltip>
+              <Typography variant="caption" sx={{ mt: 1 }}>
+                Ano {proj.year}
+              </Typography>
+              <Typography variant="body2" sx={{ 
+                fontWeight: isCritical ? 700 : 400,
+                color: isCritical ? '#e53e3e' : 'inherit'
+              }}>
+                {proj.growthRate}%
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
+      
+      <Box sx={{ mt: 2 }}>
+        {projections.some(proj => proj.growthRate > 30) && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Taxas de crescimento acima de 30% exigirão reavaliação arquitetural no Ano {projections.find(proj => proj.growthRate > 30).year}
+          </Alert>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
+// Tipos de dados
+const DATA_TYPES = {
+  '1': { name: 'Banco de Dados', compression: 0.7, growthRate: 0.05 },
+  '2': { name: 'Arquivos de Log', compression: 0.5, growthRate: 0.1 },
+  '3': { name: 'Sistema de Arquivos', compression: 0.4, growthRate: 0.15 },
+  '4': { name: 'Virtual Machines', compression: 0.3, growthRate: 0.2 },
+  '5': { name: 'Outros', compression: 0.2, growthRate: 0.1 }
+};
+
+// Opções de armazenamento
+const STORAGE_OPTIONS = {
+  '1': { name: 'HDD', speed: 'slow' },
+  '2': { name: 'SSD', speed: 'medium' },
+  '3': { name: 'Tape', speed: 'slow' },
+  '4': { name: 'Cloud', speed: 'variable' }
+};
+
+// Políticas de retenção
+const RETENTION_OPTIONS = {
+  '1': { name: 'Curto Prazo (7 dias)', days: 7 },
+  '2': { name: 'Médio Prazo (30 dias)', days: 30 },
+  '3': { name: 'Longo Prazo (1 ano)', days: 365 },
+  '4': { name: 'Arquivamento (5 anos)', days: 1825 }
+};
+
+// Tipos de backup
+const BACKUP_TYPES = {
+  '1': { name: 'Completo', frequency: 'daily', sizeFactor: 1.0 },
+  '2': { name: 'Incremental', frequency: 'daily', sizeFactor: 0.1 },
+  '3': { name: 'Diferencial', frequency: 'daily', sizeFactor: 0.3 },
+  '4': { name: 'Snapshot', frequency: 'hourly', sizeFactor: 0.05 }
+};
+
 const BackupSizingTool = () => {
   const [inputs, setInputs] = useState({
     originalDataSizeTB: 10,
@@ -149,23 +368,14 @@ const BackupSizingTool = () => {
     dataDisks: Array(8).fill(DISK_TYPES.DATA[5]),
     cacheOverhead: 5,
     dataOverhead: 7,
-    manualAppliances: 3
-  });
-
-  const [resourceUsage, setResourceUsage] = useState({
-    cpu: 65,
-    memory: 70,
-    disk: 85
+    manualAppliances: 3,
+    selectedDRScenario: DR_SCENARIOS[1] // Default to Tier 2
   });
 
   const [results, setResults] = useState(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
-  useEffect(() => {
-    calculateRequirements();
-  }, [inputs]);
-
-  const calculateRequirements = () => {
+  const calculateRequirements = useCallback(() => {
     const {
       originalDataSizeTB,
       dailyChangeRate,
@@ -178,7 +388,8 @@ const BackupSizingTool = () => {
       dataDisks,
       cacheOverhead,
       dataOverhead,
-      manualAppliances
+      manualAppliances,
+      selectedDRScenario
     } = inputs;
 
     const growthFactor = Math.pow(1 + annualGrowthRate / 100, forecastYears);
@@ -204,6 +415,17 @@ const BackupSizingTool = () => {
     const clusterThroughputTBh = totalThroughputTBh * finalAppliances;
     const throughputSufficient = clusterThroughputTBh >= requiredDailyThroughputTB;
 
+    // Calculate DR-adjusted costs
+    const baseCost = totalApplianceCapacityTB * finalAppliances * 1500; // Example cost model
+    const drAdjustedCost = baseCost * selectedDRScenario.costMultiplier;
+
+    // Generate growth projections
+    const growthProjections = GROWTH_SCENARIOS.map(scenario => ({
+      year: scenario.year,
+      growthRate: annualGrowthRate * (1 + (scenario.year / 10)), // Compound growth
+      projectedSize: originalDataSizeTB * Math.pow(1 + (annualGrowthRate * (1 + (scenario.year / 10)))/100, scenario.year)
+    }));
+
     setResults({
       projectedDataSizeTB: projectedDataSizeTB.toFixed(2),
       dailyBackupSizeTB: dailyBackupSizeTB.toFixed(2),
@@ -221,45 +443,33 @@ const BackupSizingTool = () => {
       throughputSufficient,
       requiredDailyThroughputTB: requiredDailyThroughputTB.toFixed(2),
       protectionFactor,
-      storageUtilization: ((totalProtectedStorageTB / (totalApplianceCapacityTB * finalAppliances)) * 100).toFixed(1)
+      storageUtilization: ((totalProtectedStorageTB / (totalApplianceCapacityTB * finalAppliances)) * 100).toFixed(1),
+      drAdjustedCost: drAdjustedCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      growthProjections
     });
+  }, [inputs]);
+
+  useEffect(() => {
+    calculateRequirements();
+  }, [calculateRequirements]);
+
+  const handleInputChange = (field, value) => {
+    setInputs(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
-  const handleCacheDiskChange = (disk) => {
-    setInputs({
-      ...inputs,
-      cacheDisks: Array(inputs.cacheDisks.length).fill(disk)
-    });
+  const handleDRScenarioSelect = (scenario) => {
+    setInputs(prev => ({
+      ...prev,
+      selectedDRScenario: scenario
+    }));
   };
 
-  const handleDataDiskChange = (disk) => {
-    setInputs({
-      ...inputs,
-      dataDisks: Array(inputs.dataDisks.length).fill(disk)
-    });
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
-
-  const handleCacheCountChange = (count) => {
-    const currentDisk = inputs.cacheDisks[0] || DISK_TYPES.CACHE[0];
-    const newCacheCount = Math.min(count, MAX_DISKS_PER_NODE - inputs.dataDisks.length);
-    setInputs({
-      ...inputs,
-      cacheDisks: Array(newCacheCount).fill(currentDisk)
-    });
-  };
-
-  const handleDataCountChange = (count) => {
-    const currentDisk = inputs.dataDisks[0] || DISK_TYPES.DATA[0];
-    const newDataCount = Math.min(count, MAX_DISKS_PER_NODE - inputs.cacheDisks.length);
-    setInputs({
-      ...inputs,
-      dataDisks: Array(newDataCount).fill(currentDisk)
-    });
-  };
-
-  // Para alterar o título no browser, você precisará também modificar:
-  // 1. O arquivo public/index.html (título e meta tags)
-  // 2. O arquivo src/index.js (document.title)
 
   return (
     <Box sx={{
@@ -268,7 +478,7 @@ const BackupSizingTool = () => {
       backgroundColor: '#f8fafc'
     }}>
       <Typography variant="h4" sx={{ 
-        mb: 4,
+        mb: 1,
         fontWeight: 700,
         color: '#1a365d',
         display: 'flex',
@@ -279,7 +489,7 @@ const BackupSizingTool = () => {
       </Typography>
       
       <Typography variant="subtitle2" sx={{ mb: 3, color: '#4a5568', fontStyle: 'italic' }}>
-        Desenvolvido por Cesaar Virno
+        Desenvolvido por Cesar Virno
       </Typography>
       
       <Grid container spacing={3}>
@@ -296,150 +506,139 @@ const BackupSizingTool = () => {
               Parâmetros de Backup
             </Typography>
             
-            {/* Tamanho Original dos Dados */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Tamanho Original dos Dados (TB)
+            {/* Tipo de Dado */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Tipo de Dado
               </Typography>
               <TextField
+                select
+                value={inputs.dataType}
+                onChange={(e) => handleInputChange('dataType', e.target.value)}
                 fullWidth
+              >
+                {Object.entries(DATA_TYPES).map(([key, value]) => (
+                  <MenuItem key={key} value={key}>
+                    {value.name} | Compressão: {(value.compression * 100).toFixed(0)}% | Crescimento: {(value.growthRate * 100).toFixed(0)}%
+                  </MenuItem>
+                ))}
+              </TextField>
+            </FormControl>
+
+            {/* Tamanho Atual */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Tamanho Atual (TB)
+              </Typography>
+              <TextField
                 type="number"
-                value={inputs.originalDataSizeTB}
-                onChange={(e) => setInputs({...inputs, originalDataSizeTB: Number(e.target.value)})}
+                value={inputs.currentSize}
+                onChange={(e) => handleInputChange('currentSize', parseFloat(e.target.value))}
+                fullWidth
                 InputProps={{
                   endAdornment: <InputAdornment position="end">TB</InputAdornment>,
                 }}
-                variant="outlined"
               />
-            </Box>
-            
-            {/* Taxa de Mudança Diária */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Taxa de Mudança Diária (%)
+            </FormControl>
+
+            {/* Opção de Armazenamento */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Opção de Armazenamento
               </Typography>
-              <Slider
-                value={inputs.dailyChangeRate}
-                onChange={(_, val) => setInputs({...inputs, dailyChangeRate: val})}
-                min={1}
-                max={50}
-                step={1}
-                valueLabelDisplay="auto"
-                marks={[
-                  { value: 1, label: '1%' },
-                  { value: 25, label: '25%' },
-                  { value: 50, label: '50%' }
-                ]}
-                sx={{ color: '#3182ce' }}
-              />
-            </Box>
-            
-            {/* Período de Retenção */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Período de Retenção (dias)
-              </Typography>
-              <Slider
-                value={inputs.retentionDays}
-                onChange={(_, val) => setInputs({...inputs, retentionDays: val})}
-                min={1}
-                max={365}
-                step={1}
-                valueLabelDisplay="auto"
-                marks={[
-                  { value: 7, label: '7d' },
-                  { value: 30, label: '30d' },
-                  { value: 365, label: '1a' }
-                ]}
-                sx={{ color: '#3182ce' }}
-              />
-            </Box>
-            
-            {/* Taxa de Compressão */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Taxa de Compressão
-              </Typography>
-              <Slider
-                value={inputs.compressionRatio}
-                onChange={(_, val) => setInputs({...inputs, compressionRatio: val})}
-                min={1}
-                max={10}
-                step={0.1}
-                valueLabelDisplay="auto"
-                marks={[
-                  { value: 1, label: '1x' },
-                  { value: 5, label: '5x' },
-                  { value: 10, label: '10x' }
-                ]}
-                sx={{ color: '#3182ce' }}
-              />
-            </Box>
-            
-            {/* Taxa de Crescimento Anual */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Taxa de Crescimento Anual (%)
-              </Typography>
-              <Slider
-                value={inputs.annualGrowthRate}
-                onChange={(_, val) => setInputs({...inputs, annualGrowthRate: val})}
-                min={0}
-                max={100}
-                step={1}
-                valueLabelDisplay="auto"
-                marks={[
-                  { value: 0, label: '0%' },
-                  { value: 50, label: '50%' },
-                  { value: 100, label: '100%' }
-                ]}
-                sx={{ color: '#3182ce' }}
-              />
-            </Box>
-            
-            {/* Período de Projeção */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Período de Projeção (anos)
-              </Typography>
-              <Slider
-                value={inputs.forecastYears}
-                onChange={(_, val) => setInputs({...inputs, forecastYears: val})}
-                min={1}
-                max={5}
-                step={1}
-                valueLabelDisplay="auto"
-                marks={[
-                  { value: 1, label: '1a' },
-                  { value: 3, label: '3a' },
-                  { value: 5, label: '5a' }
-                ]}
-                sx={{ color: '#3182ce' }}
-              />
-            </Box>
-            
-            {/* Nível de Proteção */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Nível de Proteção
-              </Typography>
-              <RadioGroup
-                row
-                value={inputs.protectionLevel}
-                onChange={(e) => setInputs({...inputs, protectionLevel: e.target.value})}
+              <TextField
+                select
+                value={inputs.storage}
+                onChange={(e) => handleInputChange('storage', e.target.value)}
+                fullWidth
               >
-                <FormControlLabel
-                  value="standard"
-                  control={<Radio color="primary" />}
-                  label="Padrão (2x redundância)"
-                />
-                <FormControlLabel
-                  value="high"
-                  control={<Radio color="primary" />}
-                  label="Alta (3x redundância)"
-                />
-              </RadioGroup>
-            </Box>
+                {Object.entries(STORAGE_OPTIONS).map(([key, value]) => (
+                  <MenuItem key={key} value={key}>
+                    {value.name} | Velocidade: {value.speed.toUpperCase()}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </FormControl>
+
+            {/* Política de Retenção */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Política de Retenção
+              </Typography>
+              <TextField
+                select
+                value={inputs.retention}
+                onChange={(e) => handleInputChange('retention', e.target.value)}
+                fullWidth
+              >
+                {Object.entries(RETENTION_OPTIONS).map(([key, value]) => (
+                  <MenuItem key={key} value={key}>
+                    {value.name} | {value.days} dias
+                  </MenuItem>
+                ))}
+              </TextField>
+            </FormControl>
+
+            {/* Tipo de Backup */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Tipo de Backup
+              </Typography>
+              <TextField
+                select
+                value={inputs.backupType}
+                onChange={(e) => handleInputChange('backupType', e.target.value)}
+                fullWidth
+              >
+                {Object.entries(BACKUP_TYPES).map(([key, value]) => (
+                  <MenuItem key={key} value={key}>
+                    {value.name} | Frequência: {value.frequency} | Fator: {(value.sizeFactor * 100).toFixed(0)}%
+                  </MenuItem>
+                ))}
+              </TextField>
+            </FormControl>
+          </ConfigCard>
+          
+          {/* Novo Card de Cenários de Disaster Recovery */}
+          <ConfigCard>
+            <Typography variant="h6" sx={{ 
+              mb: 3,
+              color: '#2d3748',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <VerifiedIcon sx={{ mr: 1, color: '#3182ce' }} />
+              Cenários de Disaster Recovery
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 2, color: '#4a5568' }}>
+              Selecione o nível de proteção adequado para seus requisitos de negócio:
+            </Typography>
+            
+            {DR_SCENARIOS.map((scenario) => (
+              <DRScenarioCard
+                key={scenario.id}
+                scenario={scenario}
+                isSelected={inputs.selectedDRScenario.id === scenario.id}
+                onSelect={handleDRScenarioSelect}
+              />
+            ))}
+            
+            {inputs.selectedDRScenario && (
+              <Box sx={{ mt: 2, p: 2, backgroundColor: '#ebf8ff', borderRadius: '8px' }}>
+                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                  Cenário selecionado: <strong>{inputs.selectedDRScenario.name}</strong>
+                </Typography>
+                <Typography variant="body2">
+                  <strong>RTO:</strong> {inputs.selectedDRScenario.rto} | <strong>RPO:</strong> {inputs.selectedDRScenario.rpo}
+                </Typography>
+                {results && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    <strong>Impacto no Custo:</strong> {results.drAdjustedCost}
+                  </Typography>
+                )}
+              </Box>
+            )}
           </ConfigCard>
           
           {/* Configuração de Discos por Appliance */}
@@ -450,133 +649,73 @@ const BackupSizingTool = () => {
               display: 'flex',
               alignItems: 'center'
             }}>
-              <NodeIcon sx={{ mr: 1, color: '#3182ce' }} />
-              Configuração por Appliance
+              <DiskIcon sx={{ mr: 1, color: '#3182ce' }} />
+              Configuração de Discos
             </Typography>
             
-            <Typography variant="body1" sx={{ 
-              mb: 2,
-              color: '#4a5568',
-              fontStyle: 'italic'
-            }}>
-              Total de discos por appliance: {inputs.cacheDisks.length + inputs.dataDisks.length}/{MAX_DISKS_PER_NODE}
-            </Typography>
-            
-            {/* Discos de Cache */}
             <DiskConfigurator
-              title="Discos de Cache (SSD)"
+              title="Discos de Cache"
               diskType="CACHE"
               disks={inputs.cacheDisks}
-              maxDisks={MAX_DISKS_PER_NODE - inputs.dataDisks.length}
-              onDiskChange={handleCacheDiskChange}
-              onCountChange={handleCacheCountChange}
+              maxDisks={MAX_DISKS_PER_NODE}
+              onDiskChange={(disk) => setInputs({...inputs, cacheDisks: [disk]})}
+              onCountChange={(count) => setInputs({...inputs, cacheDisks: Array(count).fill(inputs.cacheDisks[0])})}
             />
             
-            {/* Configuração de Overhead para Cache */}
-            <Box sx={{ mb: 3 }}>
-              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Overhead para Cache (%)
-                <Tooltip title="Percentual de capacidade reservada para operações do sistema em discos de cache">
-                  <InfoIcon sx={{ fontSize: '1rem', ml: 1, color: '#718096' }} />
-                </Tooltip>
-              </Typography>
-              <Slider
-                value={inputs.cacheOverhead}
-                onChange={(_, val) => setInputs({...inputs, cacheOverhead: val})}
-                min={0}
-                max={20}
-                step={1}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(val) => `${val}%`}
-                sx={{ color: '#4fc3f7' }}
-              />
-            </Box>
-            
-            <Divider sx={{ my: 3 }} />
-            
-            {/* Discos de Dados */}
             <DiskConfigurator
-              title="Discos de Dados (HDD)"
+              title="Discos de Dados"
               diskType="DATA"
               disks={inputs.dataDisks}
-              maxDisks={MAX_DISKS_PER_NODE - inputs.cacheDisks.length}
-              onDiskChange={handleDataDiskChange}
-              onCountChange={handleDataCountChange}
+              maxDisks={MAX_DISKS_PER_NODE}
+              onDiskChange={(disk) => setInputs({...inputs, dataDisks: [disk]})}
+              onCountChange={(count) => setInputs({...inputs, dataDisks: Array(count).fill(inputs.dataDisks[0])})}
             />
             
-            {/* Configuração de Overhead para Dados */}
+            {/* Overhead de Cache e Dados */}
             <Box sx={{ mb: 3 }}>
               <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
-                Overhead para Dados (%)
-                <Tooltip title="Percentual de capacidade reservada para operações do sistema em discos de dados">
-                  <InfoIcon sx={{ fontSize: '1rem', ml: 1, color: '#718096' }} />
-                </Tooltip>
+                Overhead de Cache (%)
               </Typography>
-              <Slider
-                value={inputs.dataOverhead}
-                onChange={(_, val) => setInputs({...inputs, dataOverhead: val})}
-                min={0}
-                max={20}
-                step={1}
-                valueLabelDisplay="auto"
-                valueLabelFormat={(val) => `${val}%`}
-                sx={{ color: '#66bb6a' }}
+              <TextField
+                fullWidth
+                type="number"
+                value={inputs.cacheOverhead}
+                onChange={(e) => setInputs({...inputs, cacheOverhead: Number(e.target.value)})}
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                }}
+                variant="outlined"
               />
             </Box>
             
-            {/* Configuração Manual de Appliances - CORRIGIDA */}
-            <Box sx={{ mt: 3 }}>
-              <Button 
-                variant="text" 
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                sx={{ color: '#3182ce', mb: 1 }}
-              >
-                {showAdvanced ? 'Ocultar' : 'Mostrar'} configurações avançadas
-              </Button>
-              
-              {showAdvanced && (
-                <Box sx={{ mt: 2, p: 2, backgroundColor: '#edf2f7', borderRadius: '8px' }}>
-                  <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                    Configuração Manual de Appliances
-                    <Tooltip title="Defina manualmente o número mínimo de appliances">
-                      <InfoIcon sx={{ fontSize: '1rem', ml: 1, color: '#718096' }} />
-                    </Tooltip>
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <IconButton 
-                      onClick={() => setInputs(prev => ({
-                        ...prev,
-                        manualAppliances: Math.max(1, prev.manualAppliances - 1)
-                      }))}
-                      disabled={inputs.manualAppliances <= 1}
-                    >
-                      <RemoveIcon />
-                    </IconButton>
-                    <TextField
-                      type="number"
-                      value={inputs.manualAppliances}
-                      onChange={(e) => {
-                        const value = Math.max(1, parseInt(e.target.value) || 1);
-                        setInputs(prev => ({
-                          ...prev,
-                          manualAppliances: value
-                        }));
-                      }}
-                      variant="outlined"
-                      sx={{ width: '80px' }}
-                    />
-                    <IconButton 
-                      onClick={() => setInputs(prev => ({
-                        ...prev,
-                        manualAppliances: prev.manualAppliances + 1
-                      }))}
-                    >
-                      <AddIcon />
-                    </IconButton>
-                  </Box>
-                </Box>
-              )}
+            <Box sx={{ mb: 3 }}>
+              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
+                Overhead de Dados (%)
+              </Typography>
+              <TextField
+                fullWidth
+                type="number"
+                value={inputs.dataOverhead}
+                onChange={(e) => setInputs({...inputs, dataOverhead: Number(e.target.value)})}
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                }}
+                variant="outlined"
+              />
+            </Box>
+            
+            {/* Número de Appliances */}
+            <Box sx={{ mb: 3 }}>
+              <Typography gutterBottom sx={{ color: '#4a5568', mb: 1 }}>
+                Número de Appliances
+              </Typography>
+              <TextField
+                fullWidth
+                type="number"
+                value={inputs.manualAppliances}
+                onChange={(e) => setInputs({...inputs, manualAppliances: Number(e.target.value)})}
+                variant="outlined"
+              />
             </Box>
           </ConfigCard>
         </Grid>
@@ -584,17 +723,15 @@ const BackupSizingTool = () => {
         {/* Painel de Resultados */}
         <Grid item xs={12} md={7}>
           <ConfigCard>
-            <Typography variant="h6" sx={{ 
-              mb: 3,
-              color: '#2d3748',
-              display: 'flex',
-              alignItems: 'center'
-            }}>
-              <AssessmentIcon sx={{ mr: 1, color: '#3182ce' }} />
-              Resultados do Dimensionamento
-            </Typography>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs value={activeTab} onChange={handleTabChange}>
+                <Tab label="Visão Geral" />
+                <Tab label="Projeção de Crescimento" />
+                <Tab label="Detalhes Técnicos" />
+              </Tabs>
+            </Box>
             
-            {results ? (
+            {activeTab === 0 && results && (
               <>
                 {/* Resumo da Necessidade */}
                 <Box sx={{ mb: 4 }}>
@@ -612,26 +749,26 @@ const BackupSizingTool = () => {
                     <Grid item xs={12} md={6}>
                       <ResultCard color="#3182ce">
                         <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                          Dados Projetados ({inputs.forecastYears} anos)
+                          Tamanho Projetado
                         </Typography>
                         <Typography variant="h4" sx={{ color: '#3182ce', fontWeight: 700 }}>
                           {results.projectedDataSizeTB} TB
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#718096' }}>
-                          {inputs.annualGrowthRate}% de crescimento anual
+                          Após {inputs.forecastYears} anos
                         </Typography>
                       </ResultCard>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <ResultCard color="#3182ce">
                         <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                          Backup Diário Necessário
+                          Custo Total
                         </Typography>
                         <Typography variant="h4" sx={{ color: '#3182ce', fontWeight: 700 }}>
-                          {results.dailyBackupSizeTB} TB
+                          {results.drAdjustedCost}
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#718096' }}>
-                          {inputs.compressionRatio}x de compressão aplicada
+                          Ajustado para {inputs.selectedDRScenario.name}
                         </Typography>
                       </ResultCard>
                     </Grid>
@@ -639,195 +776,140 @@ const BackupSizingTool = () => {
                   
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
-                      <ResultCard color="#3182ce">
+                      <ResultCard color="#38a169">
                         <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
                           Armazenamento Total
                         </Typography>
-                        <Typography variant="h4" sx={{ color: '#3182ce', fontWeight: 700 }}>
-                          {results.backupStorageTB} TB
+                        <Typography variant="h4" sx={{ color: '#38a169', fontWeight: 700 }}>
+                          {results.totalProtectedStorageTB} TB
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#718096' }}>
-                          {inputs.retentionDays} dias de retenção
+                          Com fator de proteção {results.protectionFactor}x
                         </Typography>
                       </ResultCard>
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <ResultCard color="#3182ce">
                         <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                          Armazenamento Protegido
+                          Appliances Necessárias
                         </Typography>
                         <Typography variant="h4" sx={{ color: '#3182ce', fontWeight: 700 }}>
-                          {results.totalProtectedStorageTB} TB
+                          {results.finalAppliances}
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#718096' }}>
-                          Redundância {results.protectionFactor}x
+                          {results.calculatedAppliances} calculadas + {results.finalAppliances - results.calculatedAppliances} extras
                         </Typography>
                       </ResultCard>
                     </Grid>
                   </Grid>
                 </Box>
+              </>
+            )}
+            
+            {activeTab === 1 && results && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Simulação de Crescimento
+                </Typography>
                 
-                {/* Configuração por Appliance */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="subtitle1" sx={{ 
-                    mb: 2,
-                    color: '#2d3748',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}>
-                    <NodeIcon sx={{ mr: 1 }} />
-                    Capacidade por Appliance
-                  </Typography>
-                  
-                  <TableContainer component={Paper} sx={{ mb: 2 }}>
+                <GrowthProjectionChart projections={results.growthProjections} />
+                
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="subtitle1">Detalhes da Projeção:</Typography>
+                  <TableContainer component={Paper} sx={{ mt: 2 }}>
                     <Table>
                       <TableHead>
                         <TableRow sx={{ backgroundColor: '#edf2f7' }}>
-                          <TableCell sx={{ fontWeight: 600 }}>Tipo</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Modelo</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Quantidade</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Capacidade Bruta (TB)</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Overhead</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>Capacidade Líquida (TB)</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Ano</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Taxa de Crescimento</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Tamanho Projetado (TB)</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Recomendação</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {inputs.cacheDisks.length > 0 && (
-                          <TableRow>
-                            <TableCell>Cache</TableCell>
-                            <TableCell>{inputs.cacheDisks[0].name}</TableCell>
-                            <TableCell>{inputs.cacheDisks.length}</TableCell>
-                            <TableCell>{(inputs.cacheDisks.length * inputs.cacheDisks[0].size / 1000).toFixed(2)}</TableCell>
-                            <TableCell>{inputs.cacheOverhead}%</TableCell>
-                            <TableCell>{results.perAppliance.cacheCapacityTB}</TableCell>
+                        {results.growthProjections.map((proj) => (
+                          <TableRow key={proj.year}>
+                            <TableCell>{proj.year}</TableCell>
+                            <TableCell>{proj.growthRate.toFixed(1)}%</TableCell>
+                            <TableCell>{proj.projectedSize.toFixed(2)}</TableCell>
+                            <TableCell>
+                              {proj.growthRate > 30 ? (
+                                <Chip label="Revisão Arquitetural" color="warning" size="small" />
+                              ) : (
+                                <Chip label="Plano Adequado" color="success" size="small" />
+                              )}
+                            </TableCell>
                           </TableRow>
-                        )}
-                        {inputs.dataDisks.length > 0 && (
-                          <TableRow>
-                            <TableCell>Dados</TableCell>
-                            <TableCell>{inputs.dataDisks[0].name}</TableCell>
-                            <TableCell>{inputs.dataDisks.length}</TableCell>
-                            <TableCell>{(inputs.dataDisks.length * inputs.dataDisks[0].size / 1000).toFixed(2)}</TableCell>
-                            <TableCell>{inputs.dataOverhead}%</TableCell>
-                            <TableCell>{results.perAppliance.dataCapacityTB}</TableCell>
-                          </TableRow>
-                        )}
-                        <TableRow sx={{ backgroundColor: '#f7fafc' }}>
-                          <TableCell colSpan={3} sx={{ fontWeight: 600 }}>Total por Appliance</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>
-                            {(
-                              (inputs.cacheDisks.length * (inputs.cacheDisks[0]?.size || 0) + 
-                              (inputs.dataDisks.length * (inputs.dataDisks[0]?.size || 0))
-                            ) / 1000).toFixed(2)} TB
-                          </TableCell>
-                          <TableCell></TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>{results.perAppliance.totalCapacityTB} TB</TableCell>
-                        </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </TableContainer>
                 </Box>
+              </Box>
+            )}
+            
+            {activeTab === 2 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Detalhes Técnicos
+                </Typography>
                 
-                {/* Recomendação de Cluster */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="subtitle1" sx={{ 
-                    mb: 2,
-                    color: '#2d3748',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}>
-                    <NodeIcon sx={{ mr: 1 }} />
-                    Infraestrutura Recomendada
-                  </Typography>
-                  
-                  <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={12} md={6}>
-                      <ResultCard color="#38a169">
-                        <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                          Appliances Configurados
-                        </Typography>
-                        <Typography variant="h3" sx={{ color: '#38a169', fontWeight: 800 }}>
-                          {results.finalAppliances}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#718096' }}>
-                          {results.calculatedAppliances < results.finalAppliances ? (
-                            `(Calculado: ${results.calculatedAppliances}, ajustado manualmente)`
-                          ) : (
-                            `(Calculado: ${results.calculatedAppliances})`
-                          )}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#4a5568', mt: 1 }}>
-                          Capacidade total: {(results.finalAppliances * results.perAppliance.totalCapacityTB).toFixed(2)} TB
-                        </Typography>
-                      </ResultCard>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      <ResultCard color={results.throughputSufficient ? '#38a169' : '#e53e3e'}>
-                        <Typography variant="subtitle2" sx={{ color: '#4a5568', mb: 1 }}>
-                          Throughput do Cluster
-                        </Typography>
-                        <Typography variant="h4" sx={{ 
-                          color: results.throughputSufficient ? '#38a169' : '#e53e3e',
-                          fontWeight: 700
-                        }}>
-                          {results.clusterThroughputTBh} TB/h
-                        </Typography>
-                        <Typography variant="caption" sx={{ 
-                          color: results.throughputSufficient ? '#718096' : '#e53e3e',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}>
-                          {results.throughputSufficient ? (
-                            <>Atende ao requisito diário de {results.requiredDailyThroughputTB} TB</>
-                          ) : (
-                            <>
-                              <WarningIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
-                              Não atende ao requisito diário de {results.requiredDailyThroughputTB} TB
-                            </>
-                          )}
-                        </Typography>
-                      </ResultCard>
-                    </Grid>
-                  </Grid>
-                  
-                  <Box sx={{ 
-                    backgroundColor: '#f0fff4',
-                    borderRadius: '8px',
-                    p: 2,
-                    mb: 2,
-                    borderLeft: '4px solid #38a169'
-                  }}>
-                    <Typography variant="body2" sx={{ color: '#2f855a' }}>
-                      Utilização de armazenamento: {results.storageUtilization}% da capacidade total
-                    </Typography>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={results.storageUtilization}
-                      sx={{ 
-                        height: 10,
-                        borderRadius: 5,
-                        mt: 1,
-                        backgroundColor: '#c6f6d5',
-                        '& .MuiLinearProgress-bar': {
-                          backgroundColor: '#38a169',
-                          borderRadius: 5
-                        }
-                      }}
-                    />
-                  </Box>
-                </Box>
-              </>
-            ) : (
-              <Box sx={{ 
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '300px',
-                color: '#a0aec0'
-              }}>
-                <StorageIcon sx={{ fontSize: '3rem', mb: 2, color: '#cbd5e0' }} />
-                <Typography>Configure os parâmetros para calcular o dimensionamento</Typography>
+                <TableContainer component={Paper}>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: '#edf2f7' }}>
+                        <TableCell sx={{ fontWeight: 600 }}>Parâmetro</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Valor</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>Tamanho Original</TableCell>
+                        <TableCell>{inputs.originalDataSizeTB} TB</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Taxa de Mudança Diária</TableCell>
+                        <TableCell>{inputs.dailyChangeRate}%</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Dias de Retenção</TableCell>
+                        <TableCell>{inputs.retentionDays}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Taxa de Compressão</TableCell>
+                        <TableCell>{inputs.compressionRatio}x</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Taxa de Crescimento Anual</TableCell>
+                        <TableCell>{inputs.annualGrowthRate}%</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Anos de Previsão</TableCell>
+                        <TableCell>{inputs.forecastYears}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Nível de Proteção</TableCell>
+                        <TableCell>{inputs.protectionLevel === 'standard' ? 'Padrão (2x)' : 'Alto (3x)'}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Overhead de Cache</TableCell>
+                        <TableCell>{inputs.cacheOverhead}%</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Overhead de Dados</TableCell>
+                        <TableCell>{inputs.dataOverhead}%</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Número de Appliances</TableCell>
+                        <TableCell>{inputs.manualAppliances}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Cenário de DR</TableCell>
+                        <TableCell>{inputs.selectedDRScenario.name}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </Box>
             )}
           </ConfigCard>
